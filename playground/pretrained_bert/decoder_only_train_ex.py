@@ -35,7 +35,7 @@ if __name__=='__main__':
     target_text = "This is a test"
     targets = tokenizer(target_text, return_tensors="pt", padding=True, truncation=True)
     decoder_input_ids = targets['input_ids']
-    labels = targets['input_ids'].copy()
+    labels = targets['input_ids'].clone()
     decoder_attention_mask = targets['attention_mask']
     
     # --  Initialize Optimizer
@@ -44,7 +44,7 @@ if __name__=='__main__':
     # -- components of trianing lopp
     for param in encoder_decoder.encoder.parameters(): # only to calculate gradients for decoder
         param.requires_grad = False 
-    outputs = encoder_decoder(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+    outputs = encoder_decoder(input_ids=input_ids, labels=labels)
     loss = outputs.loss
     loss.backward()
     optimizer.step()

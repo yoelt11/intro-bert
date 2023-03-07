@@ -1,0 +1,15 @@
+# This format is more readable than article:[all articles], highlighs:[all highlights] 
+[
+{long_text: "Guten Morgen",
+short_text: "Greet Morning"},
+{long_text: "Guten Tag",
+short_text: "Greet Day"},
+{long_text: "Gute Nacht",
+short_text: "Greet Night"},
+{long_text: "Wie geht es dir",
+short_text: "Query user status"},
+{long_text: "Alles gut",
+short_text: "Query user status"},
+{long_text: "Fühlst du dich wohl",
+short_text: "Query user status"},
+]
