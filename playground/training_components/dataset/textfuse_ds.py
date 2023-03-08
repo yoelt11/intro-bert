@@ -14,6 +14,8 @@ class TextFuseDataset(Dataset):
         self.length = len(self.samples)
         self.encoder_max_length = 512
         self.decoder_max_length = 128
+        # -- initialize tokenizer
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         
 
     def __len__(self):
@@ -21,8 +23,8 @@ class TextFuseDataset(Dataset):
 
     def __getitem__(self, idx):
         # -- Tokenize Input
-        inputs = tokenizer(self.samples[idx]['long_text'] , padding='max_length', truncation=True, max_length=self.encoder_max_length)
-        outputs = tokenizer(self.samples[idx]['short_text'], padding='max_length', truncation=True, max_length=self.decoder_max_length)
+        inputs = self.tokenizer(self.samples[idx]['long_text'] , return_tensors='pt', padding='max_length', truncation=True, max_length=self.encoder_max_length)
+        outputs = self.tokenizer(self.samples[idx]['short_text'], return_tensors='pt', padding='max_length', truncation=True, max_length=self.decoder_max_length)
         # -- Create input and label dictionaries
         batch = {}
         batch["input_ids"] = inputs.input_ids
@@ -30,10 +32,8 @@ class TextFuseDataset(Dataset):
    
         batch["decoder_input_ids"] = outputs.input_ids
         batch["decoder_attention_mask"] = outputs.attention_mask
-        batch["labels"] = outputs.input_ids.copy()
-        
-        # -- Replace [PAD] with with [UNK] as per BERT, We need to ingore pad tokens
-        batch["labels"] = [-100 if token == tokenizer.pad_token_id else token for token in batch["labels"]]
+        batch["labels"] = outputs.input_ids.clone()
+        batch['labels'][batch['labels'] == self.tokenizer.pad_token_id] = -100
 
         return batch 
 

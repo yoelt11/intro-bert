@@ -25,3 +25,6 @@ Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.
 
 # Datasets
 * [DiscoFuse](https://github.com/google-research-datasets/discofuse)
+
+# Metrics
+* [Rouge Metric](https://huggingface.co/spaces/evaluate-metric/rouge)
