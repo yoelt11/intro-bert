@@ -8,6 +8,8 @@ class IntroBert(nn.Module):
 
     def __init__(self, n_feat=4, max_sentence_len=30):
         super().__init__()
+        # -- get device
+        self.device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
         # -- param
         self.n_feat = n_feat
         self.max_sentence_len = max_sentence_len
@@ -15,7 +17,8 @@ class IntroBert(nn.Module):
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         # -- the pretrained encoder
         self.encoder = BertGenerationEncoder.from_pretrained("bert-base-uncased")
-        self.encoder.eval()
+        self.encoder.train()
+        self.encoder.to(self.device)
         # -- the trainable neural network
         init_size = self.n_feat * self.max_sentence_len * 2
         self.mlp = nn.Sequential(
@@ -23,28 +26,28 @@ class IntroBert(nn.Module):
                     nn.GELU(),
                     nn.Linear(init_size*2, init_size*2),
                     nn.GELU(),
-                    nn.Linear(init_size*2, init_size*2),
-                    nn.GELU(),
+                    #nn.Linear(init_size*2, init_size*2),
+                    #nn.GELU(),
                     nn.Linear(init_size*2, int(init_size/2)),
                     nn.GELU(),
                     nn.Linear(int(init_size/2), int(init_size/4)),
                     nn.GELU(),
                     nn.Linear(int(init_size/4), 3),
-                    nn.Softmax(1)
+                    nn.LogSoftmax(1)
                 )
 
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.CrossEntropyLoss().to(self.device)
 
     def tokenize(self, sentence: str, max_sentence_len: int = 30) -> torch.Tensor:
         # -- tokenize input, sets all inputs to equal length according to 'max_seq_len'
         tokens = self.tokenizer(sentence, max_length=max_sentence_len, truncation=True, padding='max_length').input_ids
-        return torch.tensor(tokens)
+        return torch.tensor(tokens).to(self.device)
 
     def get_top_features(self, encoded_tensor:torch.Tensor, n_feat: int=3) -> list[torch.Tensor]:
         """Performs SVD and returns the principal components according to n_feat"""
-        u, s, v = torch.svd(encoded_tensor.squeeze(0))
+        u, s, _ = torch.svd(encoded_tensor.squeeze(0))
         B_r = u[:, :n_feat] * s[:n_feat] # principal components
-        return B_r
+        return B_r.to(self.device)
     
     def prepare_inputs(self, sentence_1, sentence_2):
         ''' Gradients should be turned off during training for this module '''
@@ -58,19 +61,19 @@ class IntroBert(nn.Module):
         encoded_1 = [encoded_1[i] for i in range(encoded_1.shape[0]) ]
         encoded_2 = [encoded_2[i] for i in range(encoded_2.shape[0]) ]
 
-        feat_1 = torch.stack(list(map(lambda feature: self.get_top_features(feature, n_feat=4), encoded_1)))
-        feat_2 = torch.stack(list(map(lambda feature: self.get_top_features(feature, n_feat=4), encoded_2)))
+        feat_1 = torch.stack(list(map(lambda feature: self.get_top_features(feature.to('cpu'), n_feat=4), encoded_1))).to(self.device)
+        feat_2 = torch.stack(list(map(lambda feature: self.get_top_features(feature.to('cpu'), n_feat=4), encoded_2))).to(self.device)
         
         return feat_1, feat_2
     
     def loss(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        return self.loss_fn(output, target)
+        return self.loss_fn(output, target) * 10000
 
 
     def forward(self, sentence_1, sentence_2):
         # -- get inputs
-        with  torch.no_grad():
-            feat_1, feat_2 = self.prepare_inputs(sentence_1, sentence_2)
+        #with  torch.no_grad():
+        feat_1, feat_2 = self.prepare_inputs(sentence_1, sentence_2)
         feat_1 = feat_1.flatten(1)
         feat_2 = feat_2.flatten(1)
 

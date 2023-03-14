@@ -42,7 +42,7 @@ def train():
         outputs = model(sentence_1, sentence_2)
         
         # -- calculate losses
-        loss = model.loss(outputs, targets )
+        loss = model.loss(outputs, targets.to(device))
         loss.backward()
         
         # -- perform optimizer step
@@ -52,6 +52,8 @@ def train():
         running_loss += loss.item()
         if i % 20 == 0:
             print(f'[Epoch: {epoch + 1}, iteration: {i + 1:5d}] \nloss: {loss.item() / 100:.3f}')
+            acc = (targets.to(device).argmax(1) == outputs.argmax(1)).sum() /  BATCH_SIZE
+            print(f'batched precision: {acc}')
 
     print(f'[Epoch: {epoch + 1}] \nloss: {running_loss / BATCH_SIZE:.3f}')
 
@@ -67,13 +69,12 @@ def validate():
         # -- get inputs and ouputs
         sentence_1 = batch_data[0]
         sentence_2 = batch_data[1]
-        targets = batch_data[2]
+        targets = batch_data[2].to(device)
 
         # -- run model
         outputs = model(sentence_1, sentence_2)
         
         acc = (targets.argmax(1) == outputs.argmax(1)).sum() /  BATCH_SIZE
-        print(acc)
 
         epoch_precision += acc
         if i % 20 == 0:
@@ -91,7 +92,8 @@ if __name__=="__main__":
     WD = 25e-2
     EPOCHS = 100
     # -- set training device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+    print(f"Using device: {device}")
 
     # -- load dataset
     train_dataloader, test_dataloader = load_dataset(BATCH_SIZE, ROOT_PATH)
@@ -101,7 +103,7 @@ if __name__=="__main__":
     model.to(device)
 
     # -- load optimzer
-    optimizer = optim.AdamW(model.mlp.parameters(),  # optimizing decoder parameters only
+    optimizer = optim.AdamW(model.parameters(),  # optimizing decoder parameters only
             lr=LR,
             weight_decay=WD)
 
@@ -119,6 +121,6 @@ if __name__=="__main__":
         validate()
 
         # -- save checkpoint
-        #if epoch % 25 == 0:
-        #    torch.save(model, "/tmp/intro-bert.pt")
+        if epoch % 25 == 0:
+           torch.save(model, "../../intro-bert.pt")
 
