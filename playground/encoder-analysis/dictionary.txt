@@ -16,9 +16,13 @@ Is it three o clock?
 Is it already 7?
 Is it noon already?
 turn off the lamp
+it is too bright
 turn on the lamp
+it is too dark
 turn off the radio
+it is too loud
 turn on the radio
+it is too quiet
 have you eaten already?
 are you hungry?
 have you drank water today?

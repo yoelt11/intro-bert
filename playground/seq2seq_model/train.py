@@ -166,6 +166,7 @@ if __name__=="__main__":
 
     # -- load model
     model = load_model()
+    model.to(device)
 
     # -- load optimzer
     optimizer = optim.AdamW(model.decoder.parameters(),  # optimizing decoder parameters only

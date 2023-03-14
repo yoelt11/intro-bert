@@ -5,6 +5,7 @@
 * [BERT repository](https://github.com/dbmdz/berts)
 * [Encoder Decoder Models](https://huggingface.co/docs/transformers/model_doc/encoder-decoder)
 * [Bert generation](https://huggingface.co/docs/transformers/model_doc/bert-generation)
+* [Manifold learning](https://scikit-learn.org/stable/modules/manifold.html#isomap)
 
 # Research papers
 
@@ -25,6 +26,7 @@ Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.
 
 # Datasets
 * [DiscoFuse](https://github.com/google-research-datasets/discofuse)
+* [Standford Natural Language Inference (SNLI)](https://nlp.stanford.edu/projects/snli/)
 
 # Metrics
 * [Rouge Metric](https://huggingface.co/spaces/evaluate-metric/rouge)
