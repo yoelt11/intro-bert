@@ -4,6 +4,7 @@ from torch.utils.data import random_split, DataLoader
 from dataset import SNLI
 import sys
 sys.path.append('../models')
+from torch.optim.lr_scheduler import LinearLR
 from IntroBert import IntroBert
 
 def load_dataset(batch_size, root_path):
@@ -25,15 +26,15 @@ def train():
     
     # -- lock encoder's parameters
 
-    for param in model.encoder.parameters(): # only to calculate gradients for decoder
-        param.requires_grad = False 
+    #for param in model.encoder.parameters(): # only to calculate gradients for decoder
+    #    param.requires_grad = False 
 
     for i, batch_data in enumerate(train_dataloader, 0):
 
         # -- get inputs and ouputs
         sentence_1 = batch_data[0]
         sentence_2 = batch_data[1]
-        targets = batch_data[2]
+        targets = batch_data[2].to(device)
         
         # -- set gradients to zero
         optimizer.zero_grad()
@@ -50,8 +51,11 @@ def train():
         
         # -- in-training metrics
         running_loss += loss.item()
+        scheduler.step()
         if i % 20 == 0:
             print(f'[Epoch: {epoch + 1}, iteration: {i + 1:5d}] \nloss: {loss.item() / 100:.3f}')
+            acc = (targets.detach().cpu().numpy().argmax(1) == outputs.detach().cpu().numpy().argmax(1)).sum() /  BATCH_SIZE
+            print(f'batched precision: {acc}')
 
     print(f'[Epoch: {epoch + 1}] \nloss: {running_loss / BATCH_SIZE:.3f}')
 
@@ -61,23 +65,23 @@ def validate():
 
     # -- metric var
     epoch_precision = 0
+    with torch.no_grad():
+        for i, batch_data in enumerate(test_dataloader, 0):
 
-    for i, batch_data in enumerate(test_dataloader, 0):
+            # -- get inputs and ouputs
+            sentence_1 = batch_data[0]
+            sentence_2 = batch_data[1]
+            targets = batch_data[2].to(device)
 
-        # -- get inputs and ouputs
-        sentence_1 = batch_data[0]
-        sentence_2 = batch_data[1]
-        targets = batch_data[2]
+            # -- run model
+            outputs = model(sentence_1, sentence_2)
+            
+            acc = (targets.argmax(1) == outputs.argmax(1)).sum() /  BATCH_SIZE
 
-        # -- run model
-        outputs = model(sentence_1, sentence_2)
-        
-        acc = (targets.argmax(1) == outputs.argmax(1)).sum() /  BATCH_SIZE
-        print(acc)
-
-        epoch_precision += acc
-        if i % 20 == 0:
-            print(f'batched precision: {acc}')
+            epoch_precision += acc
+            if i % 20 == 0:
+                print(f'batched precision: {acc}')
+                print(f'sentence a: {sentence_1[0]} \nsentence b: {sentence_2[0]} \nprediction: {outputs[0].argmax()}')
 
     print(f'[Epoch Summary: {epoch + 1}]') 
     print(f'precision: {epoch_precision / i:.3f}')
@@ -85,9 +89,9 @@ def validate():
 if __name__=="__main__":
     # -- set constants
     SAVE_DIR = '/tmp/model.pt'
-    ROOT_PATH = '../../../in-work/datasets/snli_1.0/snli_1.0/'
-    BATCH_SIZE = 100
-    LR = 1e-3
+    ROOT_PATH = '../../../../in-work/datasets/snli_1.0/'
+    BATCH_SIZE = 24
+    LR = 2e-5
     WD = 25e-2
     EPOCHS = 100
     # -- set training device
@@ -101,15 +105,10 @@ if __name__=="__main__":
     model.to(device)
 
     # -- load optimzer
-    optimizer = optim.AdamW(model.mlp.parameters(),  # optimizing decoder parameters only
+    optimizer = optim.AdamW(model.parameters(),  # optimizing decoder parameters only
             lr=LR,
             weight_decay=WD)
-
-    # -- load metrics
-    # rouge-n (n-gram) scoring
-    # rouge-l (longest common subsqeuence) scoring
-    #scorer = rouge_scorer.RougeScorer(['rouge2'], use_stemmer=True)
-
+    scheduler = LinearLR(optimizer, start_factor = 0.5, total_iters=1000)
     # --  training loop
     for epoch in range(EPOCHS):
         print(f"----------------- EPOCH: {epoch}---------------------")
@@ -117,8 +116,7 @@ if __name__=="__main__":
         train()
        # -- validation step
         validate()
-
         # -- save checkpoint
-        #if epoch % 25 == 0:
-        #    torch.save(model, "/tmp/intro-bert.pt")
+        if epoch % 25 == 0:
+            torch.save(model, "../../intro-bert.pt")
 

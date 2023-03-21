@@ -1,41 +1,34 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from transformers import BertTokenizer
-from transformers import BertGenerationEncoder
+from transformers import AutoModel, AutoTokenizer, AutoConfig, T5Config, MT5Config, T5EncoderModel
 
 class IntroBert(nn.Module):
 
-    def __init__(self, n_feat=5, max_sentence_len=30):
+    def __init__(self, n_feat=5, max_sentence_len=30, pooling_stg='mean_pool'):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # -- param
         self.n_feat = n_feat
         self.max_sentence_len = max_sentence_len
         # -- the tokenizer
-        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        self.tokenizer = AutoTokenizer.from_pretrained("t5-base")
         # -- the pretrained encoder
-        self.encoder = BertGenerationEncoder.from_pretrained("bert-base-uncased")
+        T5EncoderModel.__key_to_ignore_on_load_unexpected = ["decoder.*"]
+        config = AutoConfig.from_pretrained("t5-base")
+        self.encoder = T5EncoderModel.from_pretrained("t5-base")
         self.encoder.to(self.device).train()
+        # -- pooling strategy
+        match pooling_stg:
+            case "mean_pool":
+                self.pooling = self.mean_pool
+            case "cls_pool":
+                self.pooling = self.cls_pool
         # -- the trainable neural network
-        init_size = self.n_feat * self.max_sentence_len * 3
+        init_size = 1537
         self.W = torch.rand(init_size, 3, requires_grad=True).to(self.device)
+        self.sigma = nn.Sigmoid()
         self.softmax = nn.Softmax(1)
-        #self.mlp = nn.Sequential(
-          #          nn.Linear(init_size, 3),
-                    #nn.GELU(),
-                    #nn.Linear(init_size*2, init_size*2),
-                    #nn.GELU(),
-                    #nn.Linear(init_size*2, init_size*2),
-                    #nn.GELU(),
-                    #nn.Linear(init_size*2, int(init_size/2)),
-                    #nn.GELU(),
-                    #nn.Linear(int(init_size/2), int(init_size/4)),
-                    #nn.GELU(),
-                    #nn.Linear(int(init_size/4), 3),
-           #         nn.Softmax(1)
-         #       )
-
         self.loss_fn = nn.CrossEntropyLoss().to(self.device)
 
     def tokenize(self, sentence: str, max_sentence_len: int = 30) -> torch.Tensor:
@@ -43,13 +36,14 @@ class IntroBert(nn.Module):
         tokens = self.tokenizer(sentence, max_length=max_sentence_len, truncation=True, padding='max_length').input_ids
         return torch.tensor(tokens).to(self.device)
 
-    def get_top_features(self, encoded_tensor:torch.Tensor, n_feat: int=3) -> list[torch.Tensor]:
-        """Performs SVD and returns the principal components according to n_feat"""
-        u, s, v = torch.svd(encoded_tensor.to('cpu').squeeze(0))
-        B_r = u[:, :n_feat] * s[:n_feat] # principal components
-        return B_r.to(self.device)
-    
-    def prepare_inputs(self, sentence_1, sentence_2):
+    def encode(self, sentence: str) -> torch.Tensor:
+        # -- In inference only the trained encoder, and sentences compared with cosine_similarity
+        tokens = self.tokenize(sentence).unsqueeze(0)
+        encoded = self.encoder(tokens).last_hidden_state.flatten()
+
+        return encoded
+
+    def prepare_inputs(self, sentence_1: str, sentence_2: str) -> Tuple[torch.Tensor, torch.Tensor]:
         ''' Gradients should be turned off during training for this module '''
         # -- tokenize inputs
         tokens_1 = self.tokenize(sentence_1)
@@ -57,36 +51,32 @@ class IntroBert(nn.Module):
         # -- encode inputs
         encoded_1 = self.encoder(tokens_1).last_hidden_state
         encoded_2 = self.encoder(tokens_2).last_hidden_state
-        # -- to list
-        #encoded_1 = [encoded_1[i] for i in range(encoded_1.shape[0]) ]
-        #encoded_2 = [encoded_2[i] for i in range(encoded_2.shape[0]) ]
 
-        #feat_1 = torch.stack(list(map(lambda feature: self.get_top_features(feature, n_feat=self.n_feat), encoded_1)))
-        #feat_2 = torch.stack(list(map(lambda feature: self.get_top_features(feature, n_feat=self.n_feat), encoded_2)))
-        
         return encoded_1, encoded_2 # feat_1, feat_2
     
     def loss(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         return self.loss_fn(output, target) * 10000
 
     def mean_pool(self, a):
-        mean = torch.mean(a, 0, True)
-        a[a < mean] = 0
-        return a
+        mean = torch.mean(a, dim=1)
+        return torch.clamp(mean, min=1e-9)
 
+    def cls_pool(self, a):
+        return a[:,0,:]
 
     def forward(self, sentence_1, sentence_2):
         # -- get inputs
-        feat_1, feat_2 = self.prepare_inputs(sentence_1, sentence_2)
-        # feat_1 = self.mean_pool(feat_1.flatten(1))
-        # feat_2 = self.mean_pool(feat_2.flatten(1))
-        #feat_1 = feat_1.flatten(1)
-        #feat_2 = feat_2.flatten(1)
-        #diff = feat_1.clone() - feat_2.clone()
+        feat_1, feat_2 = self.prepare_inputs(sentence_1, sentence_2) 
+
+        feat_1 = self.pooling(feat_1)
+        feat_2 = self.pooling(feat_2)
+
+        # diff = self.sigma(feat_1 - feat_2)
+        diff = (feat_1 - feat_2).pow(2).sum(1).sqrt().unsqueeze(-1)
 
         # -- concat
-        #features = torch.cat((feat_1, feat_2, diff), dim=1)
-        output =  feat_1#self.softmax(torch.mm(features,self.W))
+        features = torch.cat((feat_1, feat_2, diff), dim=1)
+        output =  self.softmax(torch.mm(features,self.W))
         return output
 
 if __name__=='__main__':
@@ -96,10 +86,10 @@ if __name__=='__main__':
     # -- target label
     label = torch.tensor([[1.,0.,0.], [0.,0.,1.]]).to('cuda')
     # -- model initialization
-    model = IntroBert().to('cuda')
+    model = IntroBert(pooling_stg="cls_pool").to('cuda')
     # -- infer
     output = model(sentence_1, sentence_2)
-    #model.loss(output, label).backward()
+    model.loss(output, label).backward()
 
     # -- analyze
     print(type(output))

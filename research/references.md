@@ -10,12 +10,12 @@
 # Research papers
 
 * [Google’s Neural Machine Translation System: Bridging the Gap
-between Human and Machine Translation](https://arxiv.org/pdf/1609.08144v2.pdf)
+  between Human and Machine Translation](https://arxiv.org/pdf/1609.08144v2.pdf)
 * [BertGen: Multi-task Generation through BERT](https://arxiv.org/pdf/2106.03484.pdf)
 * [Pre-trained Language Models for Text Generation: A Survey](https://arxiv.org/pdf/2201.05273.pdf)
 * [Deep Fusing Pre-trained Models into Neural Machine Translation](https://ojs.aaai.org/index.php/AAAI/article/download/21399/21148)
 * [BART: Denoising Sequence-to-Sequence Pre-training for Natural
-Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf)
+  Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf)
 * [Text Summarization with Pretrained Encoders](https://arxiv.org/abs/1908.08345)
 * [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/pdf/1907.12461.pdf)
 
@@ -25,8 +25,10 @@ Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.
 * [Masked language modeling](https://github.com/lucidrains/mlm-pytorch)
 
 # Datasets
+
 * [DiscoFuse](https://github.com/google-research-datasets/discofuse)
 * [Standford Natural Language Inference (SNLI)](https://nlp.stanford.edu/projects/snli/)
 
 # Metrics
+
 * [Rouge Metric](https://huggingface.co/spaces/evaluate-metric/rouge)
