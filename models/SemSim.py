@@ -7,24 +7,29 @@ from typing import Callable
 
 class SemSim(nn.Module):
     
-    def __init__(self, max_sentence_len=30, pooling_stg='mean_pool'):
+    def __init__(self, max_sentence_len=30, pooling_stg='mean_pool', device=None):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.max_sentence_len = 30
+        self.max_sentence_len = max_sentence_len
         # -- initialize components
-        self.tokenize = AutoTokenizer.from_pretrained("t5-base")
-        T5EncoderModel.__key_to_ignore_on_load_unexpected = ["decoder.*"]
-        self.encoder = T5EncoderModel.from_pretrained("t5-base").encoder
+        self.tokenize = AutoTokenizer.from_pretrained("t5-base", model_max_length=768)
+        config = AutoConfig.from_pretrained("t5-base")
+        T5EncoderModel._key_to_ignore_on_load_unexpected = ["decoder.*"]
+        self.encoder = T5EncoderModel.from_pretrained("t5-base",config=config)#.encoder
         # -- pooling
         self.pool = self.pooling(pooling_stg)
         # -- last layers
         self.linear = nn.Linear(768*3,3)
         self.softmax = nn.Softmax(1)
-        
+        self.loss_fn = nn.CrossEntropyLoss()
         # -- for inference
         self.cos_sim = nn.CosineSimilarity()
 
-    def train(self, batch_data, optimizer, loss_fn, epoch):
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self._target_device = torch.device(device)
+
+    def fit(self, batch_data, optimizer, loss_fn):
         # -- prepare inputs
         sentence_1, sentence_2, targets = batch_data
         targets = targets.to(self.device)
@@ -33,7 +38,7 @@ class SemSim(nn.Module):
         # -- run forward pass
         outputs = self.forward(sentence_1, sentence_2)
         # -- calculate loss
-        loss = loss_fn(outputs, targets)
+        loss = self.loss_fn(outputs, targets)
         # -- backpropagate
         loss.backward()
         # -- update weights
@@ -65,7 +70,7 @@ class SemSim(nn.Module):
     def tokenize_encode(self, sentence: str) -> torch.Tensor:
         '''Tokenize and produce embeddings'''
         # -- tokenize input
-        tokens = self.tokenize(sentence,return_tensors='pt', pad_to_max_length=True, truncation=True, max_length=self.max_sentence_len).input_ids
+        tokens = self.tokenize(sentence,return_tensors='pt', padding='max_length', truncation=True, max_length=self.max_sentence_len).input_ids
         # -- encode input
         encode = self.encoder(tokens).last_hidden_state
         
@@ -89,13 +94,18 @@ class SemSim(nn.Module):
             ax2.imshow(e_2)
             # -- show or save image
             plt.savefig(f'../../debug_epoch_{str(epoch)}.png')
+            plt.close()
     
     def pooling(self, pooling_stg: str) -> Callable[[torch.Tensor], torch.Tensor]:
         match pooling_stg:
             case 'mean_pool':
-                return lambda x : torch.clamp(torch.mean(x, dim=1), 1e-9)
+                def mean_pool(x):
+                    return torch.clamp(torch.mean(x, dim=1), 1e-9)
+                return mean_pool
             case 'cls_pool':
-                return lambda x: x[:,0,:]
+                def cls_pool(x):
+                    return x[:,0,:]
+                return cls_pool
 
     def forward(self, sentence_1: str, sentence_2: str) -> torch.Tensor:
         '''Function ran during training, returns [0,1,0] a 3 dim tensor representing the class.
